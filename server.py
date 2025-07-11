@@ -9,9 +9,13 @@ from flask import Flask, Response
 from flask_socketio import SocketIO
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
 from threading import Lock
-from utilss import generate_bbox
+from utilss import generate_bbox, process_image
 import torch
-model = torch.hub.load("ultralytics/yolov5", "yolov5s")
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+device = "cuda" if torch.cuda.is_available() else "cpu"
+yolo_model = torch.hub.load("ultralytics/yolov5", "yolov5s").to(device)
+feature_extractor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
+depth_model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf").to(device)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -44,21 +48,22 @@ def video_feed():
                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
 def generate_frames():
-    """Generator function that continuously serves the latest frame"""
     while True:
         with frame_lock:
             if latest_frame is None:
-                # Create a blank frame if no frames received yet
+                print("No frame yet. Sending black frame.")
                 blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 _, buffer = cv2.imencode('.jpg', blank_frame)
                 frame = buffer.tobytes()
             else:
+                print("Sending processed frame.")
                 _, buffer = cv2.imencode('.jpg', latest_frame)
                 frame = buffer.tobytes()
         
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        time.sleep(0.033)  # ~30fps
+        time.sleep(0.033)
+
 
 @socketio.on('connect')
 def handle_connect():
@@ -127,11 +132,10 @@ async def handle_offer(data):
                             
                         try:
                             img = frame.to_ndarray(format="bgr24")
-                            with frame_lock:
-                                 latest_frame = generate_bbox(model, img)
-                            
-                            #if frame_count % 10 == 0:
-                            #    latest_frame = generate_bbox(model, img)
+                            if frame_count % 5 == 0:
+                                 old_img, bbox, latest_frame = process_image(img, yolo_model, feature_extractor, device, depth_model)
+                                 latest_frame = latest_frame * 255
+                                 latest_frame = np.repeat(latest_frame[:, :, np.newaxis], 3, axis=2)
                         except Exception as e:
                             print(f"Frame processing error: {e}")
                             
@@ -198,4 +202,4 @@ if __name__ == '__main__':
     threading.Thread(target=run_asyncio_loop, daemon=True).start()
     
     print("Starting server...")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='192.168.0.110', port=5000, debug=True)
