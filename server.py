@@ -9,6 +9,9 @@ from flask import Flask, Response
 from flask_socketio import SocketIO
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
 from threading import Lock
+from utilss import generate_bbox
+import torch
+model = torch.hub.load("ultralytics/yolov5", "yolov5s")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -125,10 +128,10 @@ async def handle_offer(data):
                         try:
                             img = frame.to_ndarray(format="bgr24")
                             with frame_lock:
-                                latest_frame = img
+                                 latest_frame = generate_bbox(model, img)
                             
-                            #cocoif frame_count % 30 == 0:
-                                #cv2.imwrite(f"received_frame_{frame_count}.jpg", img)
+                            #if frame_count % 10 == 0:
+                            #    latest_frame = generate_bbox(model, img)
                         except Exception as e:
                             print(f"Frame processing error: {e}")
                             
