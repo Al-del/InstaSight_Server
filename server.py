@@ -132,16 +132,32 @@ async def handle_offer(data):
                             
                         try:
                             img = frame.to_ndarray(format="bgr24")
-                            if frame_count % 5 == 0:
-                                 old_img, bbox, latest_frame = process_image(img, yolo_model, feature_extractor, device, depth_model)
-                                 latest_frame = latest_frame * 255
-                                 latest_frame = np.repeat(latest_frame[:, :, np.newaxis], 3, axis=2)
+                            if frame_count % 3 == 0:
+                                # Get all return values including close_objects
+                                processed_img, bbox, depth_map, close_objects = process_image(
+                                    img, yolo_model, feature_extractor, device, depth_model
+                                )
+                                
+                                # Send warning if any objects are too close
+                                if close_objects:
+                                    print("OK")
+                                    socketio.emit('object_warning', {
+                                        'warning': 'TOO_CLOSE',
+                                        'objects': close_objects,
+                                        'timestamp': time.time()
+                                    })
+                                
+                                # Convert depth map for visualization if needed
+                                depth_vis = (depth_map * 255).astype(np.uint8)
+                                depth_vis = np.repeat(depth_vis[:, :, np.newaxis], 3, axis=2)
+                                
+                                # Store the processed image (not depth map) as latest_frame
+                                latest_frame = processed_img
+                                
                         except Exception as e:
                             print(f"Frame processing error: {e}")
-                            
                 except Exception as e:
-                    print(f"Track processing ended: {e}")
-
+                    print(f"Frame processing error: {e}")
             asyncio.create_task(process_frames())
 
     try:
