@@ -22,7 +22,7 @@ app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(
     app,
     async_mode='eventlet',
-    cors_allowed_origins=["http://localhost:4200"]
+    cors_allowed_origins=["*", "http://localhost:4200", "https://confirmed-hist-toddler-labs.trycloudflare.com", "https://herring-social-happily.ngrok-free.app"]
 )
 
 pcs = set()
@@ -132,7 +132,7 @@ async def handle_offer(data):
                             
                         try:
                             img = frame.to_ndarray(format="bgr24")
-                            if frame_count % 3 == 0:
+                            if frame_count % 5 == 0:
                                 # Get all return values including close_objects
                                 processed_img, bbox, depth_map, close_objects = process_image(
                                     img, yolo_model, feature_extractor, device, depth_model
@@ -140,7 +140,6 @@ async def handle_offer(data):
                                 
                                 # Send warning if any objects are too close
                                 if close_objects:
-                                    print("OK")
                                     socketio.emit('object_warning', {
                                         'warning': 'TOO_CLOSE',
                                         'objects': close_objects,
@@ -218,4 +217,4 @@ if __name__ == '__main__':
     threading.Thread(target=run_asyncio_loop, daemon=True).start()
     
     print("Starting server...")
-    socketio.run(app, host='192.168.0.110', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
